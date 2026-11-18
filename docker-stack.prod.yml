@@ -1,0 +1,25 @@
+version: "3.8"
+services:
+  nginx:
+    ports:
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: ingress
+  blade-api-gateway:
+    deploy:
+      placement:
+        max_replicas_per_node: 1
+networks:
+  edge:
+    driver_opts:
+      encrypted: "true"
+  auth:
+    driver_opts:
+      encrypted: "true"
+  service-a:
+    driver_opts:
+      encrypted: "true"
+  service-b:
+    driver_opts:
+      encrypted: "true"

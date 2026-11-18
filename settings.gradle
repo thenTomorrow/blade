@@ -1,0 +1,2 @@
+rootProject.name = 'blade'
+include 'blade-api-gateway', 'blade-auth', 'blade-service-a', 'blade-service-b'

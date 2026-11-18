@@ -1,0 +1,103 @@
+version: "3.8"
+
+x-java-deploy: &java-deploy
+  replicas: 1
+  restart_policy:
+    condition: on-failure
+    delay: 5s
+
+services:
+  nginx:
+    image: ${BLADE_IMAGE_PREFIX:-blade}/nginx:${BLADE_IMAGE_TAG:-local}
+    networks: [edge]
+    secrets:
+      - source: tls_cert
+        target: tls_cert
+        mode: 0400
+      - source: tls_key
+        target: tls_key
+        mode: 0400
+    deploy: *java-deploy
+
+  blade-api-gateway:
+    image: ${BLADE_IMAGE_PREFIX:-blade}/blade-api-gateway:${BLADE_IMAGE_TAG:-local}
+    networks: [edge, auth, service-a, service-b]
+    environment:
+      BLADE_JWT_ISSUER: ${BLADE_JWT_ISSUER:-blade-auth}
+      BLADE_JWT_PUBLIC_KEY_FILE: /run/secrets/jwt_public_key
+    secrets:
+      - source: jwt_public_key
+        target: jwt_public_key
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+    deploy: *java-deploy
+
+  blade-auth:
+    image: ${BLADE_IMAGE_PREFIX:-blade}/blade-auth:${BLADE_IMAGE_TAG:-local}
+    networks: [auth]
+    environment:
+      BLADE_JWT_ISSUER: ${BLADE_JWT_ISSUER:-blade-auth}
+      BLADE_JWT_PUBLIC_KEY_FILE: /run/secrets/jwt_public_key
+      BLADE_JWT_PRIVATE_KEY_FILE: /run/secrets/jwt_private_key
+      BLADE_PASSWORD_HASH_FILE: /run/secrets/password_hash
+      BLADE_AUTH_USERNAME: ${BLADE_AUTH_USERNAME:-blade}
+      BLADE_AUTH_USER_ID: ${BLADE_AUTH_USER_ID:-51d4db3c-bb6f-423a-b313-7f6f023a2d15}
+      BLADE_AUTH_ROLES: ${BLADE_AUTH_ROLES:-USER}
+    secrets:
+      - source: jwt_public_key
+        target: jwt_public_key
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: jwt_private_key
+        target: jwt_private_key
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: password_hash
+        target: password_hash
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+    deploy: *java-deploy
+
+  blade-service-a:
+    image: ${BLADE_IMAGE_PREFIX:-blade}/blade-service-a:${BLADE_IMAGE_TAG:-local}
+    networks: [service-a]
+    deploy: *java-deploy
+
+  blade-service-b:
+    image: ${BLADE_IMAGE_PREFIX:-blade}/blade-service-b:${BLADE_IMAGE_TAG:-local}
+    networks: [service-b]
+    deploy: *java-deploy
+
+networks:
+  edge:
+    driver: overlay
+  auth:
+    driver: overlay
+    internal: true
+  service-a:
+    driver: overlay
+    internal: true
+  service-b:
+    driver: overlay
+    internal: true
+
+secrets:
+  tls_cert:
+    external: true
+    name: ${BLADE_TLS_CERT_SECRET:-blade_tls_cert}
+  tls_key:
+    external: true
+    name: ${BLADE_TLS_KEY_SECRET:-blade_tls_key}
+  jwt_private_key:
+    external: true
+    name: ${BLADE_JWT_PRIVATE_SECRET:-blade_jwt_private_key}
+  jwt_public_key:
+    external: true
+    name: ${BLADE_JWT_PUBLIC_SECRET:-blade_jwt_public_key}
+  password_hash:
+    external: true
+    name: ${BLADE_PASSWORD_SECRET:-blade_password_hash}
