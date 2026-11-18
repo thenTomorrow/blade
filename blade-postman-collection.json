@@ -1,0 +1,235 @@
+{
+  "info": {
+    "_postman_id": "b7a3a4d8-6f47-4a0f-9f2d-3d5d8a2e8b21",
+    "name": "Blade - API locali",
+    "description": "Collection per provare il gateway Blade in locale. Avviare i quattro moduli con il profilo local prima delle richieste. Il login salva automaticamente access_token e refresh_token nelle variabili della collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "username",
+      "value": "blade",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "blade",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Autenticazione",
+      "description": "Operazioni di login e rinnovo del token.",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Esegue il login e salva i token restituiti dal servizio blade-auth."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Risposta HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('access_token', body.access_token);",
+                  "    pm.collectionVariables.set('refresh_token', body.refresh_token);",
+                  "    pm.test('Access token presente', function () {",
+                  "        pm.expect(body.access_token).to.be.a('string').and.not.empty;",
+                  "    });",
+                  "    pm.test('Refresh token presente', function () {",
+                  "        pm.expect(body.refresh_token).to.be.a('string').and.not.empty;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh access token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Genera un nuovo access token usando il refresh token salvato dopo il login."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Risposta HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('access_token', body.access_token);",
+                  "    pm.collectionVariables.set('refresh_token', body.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Servizi protetti",
+      "description": "Richieste inoltrate dal gateway ai microservizi con il Bearer token salvato.",
+      "item": [
+        {
+          "name": "Service A - whoami",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/a/whoami",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "a",
+                "whoami"
+              ]
+            },
+            "description": "Verifica autenticazione e propagazione di X-User-Id e X-User-Roles verso blade-service-a."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Risposta HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Risposta del service A', function () {",
+                  "    pm.expect(pm.response.json().service).to.eql('blade-service-a');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Service B - whoami",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/b/whoami",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "b",
+                "whoami"
+              ]
+            },
+            "description": "Verifica autenticazione e propagazione di X-User-Id e X-User-Roles verso blade-service-b."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Risposta HTTP 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Risposta del service B', function () {",
+                  "    pm.expect(pm.response.json().service).to.eql('blade-service-b');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

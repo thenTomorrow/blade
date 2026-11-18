@@ -41,6 +41,12 @@ public class GatewayApplication {
         SpringApplication.run(GatewayApplication.class, args);
     }
 
+    /** Registra metodo, endpoint, stato e durata di ogni richiesta gestita dal gateway. */
+    @Bean
+    GatewayRequestLoggingFilter gatewayRequestLoggingFilter() {
+        return new GatewayRequestLoggingFilter();
+    }
+
     /** Usa solo la chiave pubblica per verificare la firma RS256, l'issuer e i claim richiesti dal gateway. */
     @Bean
     ReactiveJwtDecoder accessDecoder(@Value("${blade.jwt.public-key}") Resource key,

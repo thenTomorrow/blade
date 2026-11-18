@@ -9,6 +9,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
@@ -32,6 +34,7 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/auth")
 class AuthController {
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
     private static final Duration ACCESS_TTL = Duration.ofMinutes(5);
     private static final Duration REFRESH_TTL = Duration.ofDays(1);
     private static final Pattern ROLE = Pattern.compile("[A-Z][A-Z0-9_]{0,31}");
@@ -62,6 +65,7 @@ class AuthController {
         if (username.isBlank() || this.roles.size() > 32
                 || !this.roles.stream().allMatch(role -> ROLE.matcher(role).matches())
                 || !BCRYPT.matcher(this.passwordHash).matches()) {
+            log.error("Invalid authentication configuration: username, roles or BCrypt password hash is invalid");
             throw new IllegalStateException("Configure a username, valid roles and a BCrypt hash (cost 10-14)");
         }
     }
@@ -69,13 +73,17 @@ class AuthController {
     /** Verifica le credenziali con BCrypt ed emette un access token da 5 minuti e un refresh token da 24 ore. */
     @PostMapping("/login")
     ResponseEntity<Tokens> login(@RequestBody Login request) {
+        log.info("Login request received: username={}", request.username());
         String password = request.password();
         if (password == null || password.isEmpty() || password.length() > 72
                 || password.getBytes(UTF_8).length > 72 || !passwords.matches(password, passwordHash)
                 || !username.equals(request.username())) {
+            log.warn("Login rejected: username={}", request.username());
             throw unauthorized();
         }
         Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        log.info("Login accepted: username={}, accessTtlSeconds={}, refreshTtlSeconds={}",
+                username, ACCESS_TTL.toSeconds(), REFRESH_TTL.toSeconds());
         return response(now, issue(now, REFRESH_TTL, "blade-auth:refresh", "refresh"), REFRESH_TTL.toSeconds());
     }
 
@@ -85,8 +93,10 @@ class AuthController {
      */
     @PostMapping("/refresh")
     ResponseEntity<Tokens> refresh(@RequestBody Refresh request) {
+        log.info("Refresh request received");
         String value = request.refresh_token();
         if (value == null || value.isBlank()) {
+            log.warn("Refresh rejected: token missing");
             throw unauthorized();
         }
         try {
@@ -96,10 +106,14 @@ class AuthController {
                     || !"refresh".equals(jwt.getClaimAsString("token_use"))
                     || !userId.equals(jwt.getSubject()) || jwt.getExpiresAt() == null
                     || !now.isBefore(jwt.getExpiresAt())) {
+                log.warn("Refresh rejected: claims invalid");
                 throw unauthorized();
             }
+            log.info("Refresh accepted: userId={}, remainingTtlSeconds={}", userId,
+                    Duration.between(now, jwt.getExpiresAt()).toSeconds());
             return response(now, value, Duration.between(now, jwt.getExpiresAt()).toSeconds());
         } catch (JwtException exception) {
+            log.warn("Refresh rejected: token validation failed");
             throw unauthorized();
         }
     }
