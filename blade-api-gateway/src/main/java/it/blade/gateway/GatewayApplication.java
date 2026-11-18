@@ -83,18 +83,21 @@ public class GatewayApplication {
                 .build();
     }
 
-    /** Instrada login e refresh all'auth e bilancia le richieste verso A e B dopo aver impostato ID e ruoli. */
+    /** Instrada le richieste verso auth, A e B dopo aver applicato i filtri di sicurezza e identita. */
     @Bean
-    RouteLocator routes(RouteLocatorBuilder builder, @Value("${blade.routes.auth}") String authUri) {
+    RouteLocator routes(RouteLocatorBuilder builder,
+                        @Value("${blade.routes.auth}") String authUri,
+                        @Value("${blade.routes.service-a}") String serviceAUri,
+                        @Value("${blade.routes.service-b}") String serviceBUri) {
         return builder.routes()
                 .route("auth", r -> r.path("/auth/login", "/auth/refresh").and().method(HttpMethod.POST)
                         .filters(f -> f.removeRequestHeader("X-User-Id")
                                 .removeRequestHeader("X-User-Roles").removeRequestHeader("Authorization"))
                         .uri(authUri))
                 .route("service-a", r -> r.path("/api/a/**").filters(f -> f.filter(new UserHeadersFilter()))
-                        .uri("lb://blade-service-a"))
+                        .uri(serviceAUri))
                 .route("service-b", r -> r.path("/api/b/**").filters(f -> f.filter(new UserHeadersFilter()))
-                        .uri("lb://blade-service-b"))
+                        .uri(serviceBUri))
                 .build();
     }
 }
