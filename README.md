@@ -4,7 +4,7 @@ Scocca backend con Java 21, Spring Boot **4.1.2**, Spring Cloud **2025.1.4** e G
 
 All'avvio ogni applicazione Spring Boot mostra in console un banner ASCII con il proprio nome, definito in `src/main/resources/banner.txt` nel relativo modulo.
 
-Le quattro applicazioni usano Log4j2, configurato in `src/main/resources/log4j2.xml` in ciascun modulo. I log escono su `STDOUT` tramite un appender asincrono, con timestamp `yyyy-MM-dd HH:mm:ss` e colori per livello.
+Le quattro applicazioni usano Logback, configurato in `src/main/resources/logback-spring.xml` in ciascun modulo. I log escono su `STDOUT` tramite un appender asincrono, con timestamp `yyyy-MM-dd HH:mm:ss` e colori per livello.
 
 ```text
 Client HTTPS -> Nginx -> blade-api-gateway -> blade-auth      (login / refresh)
