@@ -16,6 +16,31 @@ Solo Nginx pubblica una porta. Distribuisce le richieste alle repliche del gatew
 
 Il gateway verifica firma RS256, issuer, audience, scadenza, tipo del token e claim d'identità. Rimuove il bearer prima di inoltrare la richiesta e sostituisce `X-User-Id` e `X-User-Roles` con ID e ruoli ricavati dal token; i ruoli viaggiano separati da virgola. A e B non decodificano JWT. **Non pubblicare le loro porte e non collegare container non fidati alle loro overlay**: la fiducia negli header dipende dall'isolamento di rete.
 
+## Database MySQL per il login
+
+1. In MySQL Workbench, esegui [`schema.sql`](blade-auth/src/main/resources/db/schema.sql) con un account amministrativo (MySQL 8.0.17+). Lo script crea lo schema `blade`, quattro tabelle e i ruoli `USER` e `READER`, ma nessun utente applicativo.
+2. Crea un account MySQL dedicato `blade_auth`. Dagli `SELECT` sulle quattro tabelle e `INSERT` e `UPDATE (last_used_at)` su `user_access`. Usa un account amministrativo separato per provisioning, revoche e pulizia.
+3. Da Git Bash, nella root, genera un hash Argon2id (64 MiB, 3 iterazioni, parallelismo 1):
+
+   ```sh
+   read -rs -p 'Password (minimo 15 caratteri): ' password; printf '\n'
+   printf '%s\n' "$password" | sh ./gradlew --quiet :blade-auth:passwordHash
+   unset password
+   ```
+
+4. Esegui le seguenti istruzioni in Workbench, sostituendo il segnaposto con l'intera stringa `$argon2id$...` stampata dal comando. Non committare l'hash.
+
+   ```sql
+   USE blade;
+   START TRANSACTION;
+   SET @id = UUID();
+   INSERT INTO `user` (id, username, password_hash) VALUES (@id, 'blade', '<ARGON2ID_HASH>');
+   INSERT INTO user_role (user_id, role_id) SELECT @id, id FROM `role` WHERE code = 'USER';
+   COMMIT;
+   ```
+
+Per l'avvio da Eclipse imposta `BLADE_DATASOURCE_PASSWORD` nella configurazione di lancio di `blade-auth`. Se diversi dai default, imposta anche `BLADE_DATASOURCE_URL` (`jdbc:mysql://127.0.0.1:3306/blade`) e `BLADE_DATASOURCE_USERNAME` (`blade_auth`). Da Docker Desktop il default usa `host.docker.internal`; MySQL deve accettare connessioni dal container. Su Swarm multi-host specifica un endpoint MySQL privato raggiungibile dai nodi e configura TLS verificato (`sslMode=VERIFY_IDENTITY`).
+
 ## Avvio locale con Docker Swarm
 
 Prerequisiti: Docker Engine (oppure Docker Desktop con container Linux), OpenSSL e JDK 21 per i build/test fuori da Docker. Esegui i comandi da `blade`. Su Windows puoi usare Git Bash per i blocchi shell.
@@ -38,10 +63,9 @@ Prerequisiti: Docker Engine (oppure Docker Desktop con container Linux), OpenSSL
      -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1'
    openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out .secrets/jwt.key
    openssl pkey -in .secrets/jwt.key -pubout -out .secrets/jwt.pem
-   docker run --rm -it httpd:2.4-alpine htpasswd -nBC 12 blade
    ```
 
-   Nell'ultimo comando scegli una password. Copia **solo** l'hash BCrypt (la parte dopo `blade:`) in `.secrets/password.bcrypt`, come testo UTF-8 senza BOM. Non inserire la password in chiaro nel file. Se Git Bash converte erroneamente `/CN=localhost` in un percorso Windows, anteponi `MSYS_NO_PATHCONV=1` al comando `openssl req`.
+   Se Git Bash converte erroneamente `/CN=localhost` in un percorso Windows, anteponi `MSYS_NO_PATHCONV=1` al comando `openssl req`.
 
 3. Registra i secret sul manager e avvia lo stack locale:
 
@@ -50,7 +74,9 @@ Prerequisiti: Docker Engine (oppure Docker Desktop con container Linux), OpenSSL
    docker secret create blade_tls_key .secrets/tls.key
    docker secret create blade_jwt_private_key .secrets/jwt.key
    docker secret create blade_jwt_public_key .secrets/jwt.pem
-   docker secret create blade_password_hash .secrets/password.bcrypt
+   read -rs -p 'Password MySQL di blade_auth: ' db_password; printf '\n'
+   printf '%s' "$db_password" | docker secret create blade_mysql_password -
+   unset db_password
    docker stack deploy --resolve-image never -c docker-stack.yml -c docker-compose.override.yml blade
    docker stack services blade
    ```
@@ -70,14 +96,14 @@ Usa `https://localhost:8443`. Aggiungi il certificato locale di test tra quelli 
 
 Invia le POST con `Content-Type: application/json` e senza header `Authorization`. Credenziali errate, JWT scaduti e uso del tipo di token sbagliato restituiscono `401`. Per vedere che gli header del client non vengono accettati, aggiungi `X-User-Roles: ADMIN` a una GET autenticata: il servizio deve restituire i ruoli del token, non `ADMIN`.
 
-L'auth dimostrativa supporta un solo utente configurabile con `BLADE_AUTH_USERNAME`, `BLADE_AUTH_USER_ID` (UUID) e `BLADE_AUTH_ROLES` (es. `USER,READER`). Non c'è un database utenti. Il refresh è stateless e riutilizzabile fino a scadenza: non sono implementati logout, rotazione o revoca individuale. Prima di aprire il servizio a utenti reali, adotta una gestione utenti e sessioni adatta alla produzione.
+Il login legge utente e ruoli da MySQL. Il refresh rimane riutilizzabile fino alla scadenza: `user_access` conserva il suo identificativo (`jti`), non il token. Per revocare una sessione, valorizza `revoked_at` con `UTC_TIMESTAMP(6)`; disabilitare l'utente blocca login e refresh. Gli access token gia emessi restano validi per un massimo di 5 minuti. Prevedi la pulizia delle sessioni scadute e un limite ai tentativi di login prima di esporre il servizio in produzione.
 
 ## Deploy multi-host
 
 - Usa nodi Linux su IP raggiungibili della stessa rete. Sul manager inizializza Swarm con `docker swarm init --advertise-addr <IP_LAN_MANAGER>`; sugli altri nodi esegui il comando restituito da `docker swarm join-token worker`.
 - Tra i nodi consenti `2377/tcp` verso i manager, `7946/tcp+udp`, `4789/udp` e protocollo IP 50 (ESP) per le overlay cifrate. Non esporre questi canali alla rete pubblica. Il traffico dei client entra solo da `443/tcp`. Il routing mesh accetta HTTPS sugli IP dei nodi e lo consegna a Nginx.
 - Pubblica le cinque immagini in un registry raggiungibile da tutti i nodi. Usa un tag di release immutabile e imposta `BLADE_IMAGE_PREFIX` (es. `registry.example.com/team/blade`) e `BLADE_IMAGE_TAG` sul manager prima del deploy. Per ogni componente costruisci e pubblica `$BLADE_IMAGE_PREFIX/<componente>:$BLADE_IMAGE_TAG`.
-- Registra i secret nel cluster di produzione: certificato TLS con catena completa, chiave corrispondente, nuova coppia RSA JWT, hash password. Usa nomi distinti se condividi lo stesso cluster con altri ambienti. I nomi esterni possono essere sovrascritti con `BLADE_TLS_CERT_SECRET`, `BLADE_TLS_KEY_SECRET`, `BLADE_JWT_PRIVATE_SECRET`, `BLADE_JWT_PUBLIC_SECRET` e `BLADE_PASSWORD_SECRET`. Usare per produzione un nome stack distinto da quello locale: per cambiare le opzioni di cifratura di una overlay esistente occorre ricrearla.
+- Registra i secret nel cluster di produzione: certificato TLS con catena completa, chiave corrispondente, nuova coppia RSA JWT e password dell'account MySQL. Usa nomi distinti se condividi lo stesso cluster con altri ambienti. I nomi esterni possono essere sovrascritti con `BLADE_TLS_CERT_SECRET`, `BLADE_TLS_KEY_SECRET`, `BLADE_JWT_PRIVATE_SECRET`, `BLADE_JWT_PUBLIC_SECRET` e `BLADE_MYSQL_PASSWORD_SECRET`. Usa un nome stack distinto da quello locale: per cambiare la cifratura di una overlay esistente occorre ricrearla.
 - Punta il DNS del backend agli ingressi Swarm o a un bilanciatore TCP sulla porta 443. Il nome usato dai client deve essere nel certificato di Nginx.
 
 ```sh

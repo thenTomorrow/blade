@@ -35,15 +35,14 @@ services:
 
   blade-auth:
     image: ${BLADE_IMAGE_PREFIX:-blade}/blade-auth:${BLADE_IMAGE_TAG:-local}
-    networks: [auth]
+    networks: [auth, auth-db]
     environment:
       BLADE_JWT_ISSUER: ${BLADE_JWT_ISSUER:-blade-auth}
       BLADE_JWT_PUBLIC_KEY_FILE: /run/secrets/jwt_public_key
       BLADE_JWT_PRIVATE_KEY_FILE: /run/secrets/jwt_private_key
-      BLADE_PASSWORD_HASH_FILE: /run/secrets/password_hash
-      BLADE_AUTH_USERNAME: ${BLADE_AUTH_USERNAME:-blade}
-      BLADE_AUTH_USER_ID: ${BLADE_AUTH_USER_ID:-51d4db3c-bb6f-423a-b313-7f6f023a2d15}
-      BLADE_AUTH_ROLES: ${BLADE_AUTH_ROLES:-USER}
+      BLADE_DATASOURCE_URL: ${BLADE_DATASOURCE_URL:-jdbc:mysql://host.docker.internal:3306/blade}
+      BLADE_DATASOURCE_USERNAME: ${BLADE_DATASOURCE_USERNAME:-blade_auth}
+      SPRING_CONFIG_IMPORT: configtree:/run/secrets/
     secrets:
       - source: jwt_public_key
         target: jwt_public_key
@@ -55,8 +54,8 @@ services:
         uid: "10001"
         gid: "10001"
         mode: 0400
-      - source: password_hash
-        target: password_hash
+      - source: mysql_password
+        target: spring.datasource.password
         uid: "10001"
         gid: "10001"
         mode: 0400
@@ -78,6 +77,8 @@ networks:
   auth:
     driver: overlay
     internal: true
+  auth-db:
+    driver: overlay
   service-a:
     driver: overlay
     internal: true
@@ -98,6 +99,6 @@ secrets:
   jwt_public_key:
     external: true
     name: ${BLADE_JWT_PUBLIC_SECRET:-blade_jwt_public_key}
-  password_hash:
+  mysql_password:
     external: true
-    name: ${BLADE_PASSWORD_SECRET:-blade_password_hash}
+    name: ${BLADE_MYSQL_PASSWORD_SECRET:-blade_mysql_password}

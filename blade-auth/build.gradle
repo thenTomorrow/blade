@@ -12,9 +12,19 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-logging'
     implementation 'org.springframework.security:spring-security-oauth2-jose'
     implementation 'org.springframework.security:spring-security-crypto'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly 'org.bouncycastle:bcprov-jdk18on:1.85.2'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'com.h2database:h2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 tasks.named('bootJar') { archiveFileName = 'app.jar' }
 tasks.named('test') { useJUnitPlatform() }
+
+tasks.register('passwordHash', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'it.blade.auth.security.Passwords'
+    standardInput = System.in
+}

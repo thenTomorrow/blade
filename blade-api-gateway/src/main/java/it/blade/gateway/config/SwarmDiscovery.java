@@ -1,4 +1,4 @@
-package it.blade.gateway;
+package it.blade.gateway.config;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;

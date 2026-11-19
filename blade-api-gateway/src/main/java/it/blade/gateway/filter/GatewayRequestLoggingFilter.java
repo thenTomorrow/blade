@@ -1,4 +1,4 @@
-package it.blade.gateway;
+package it.blade.gateway.filter;
 
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -9,7 +9,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 /** Registra le richieste processate dal gateway senza esporre token, body o query string. */
-final class GatewayRequestLoggingFilter implements GlobalFilter, Ordered {
+public final class GatewayRequestLoggingFilter implements GlobalFilter, Ordered {
     private static final Logger log = LoggerFactory.getLogger(GatewayRequestLoggingFilter.class);
 
     @Override

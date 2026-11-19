@@ -1,4 +1,4 @@
-package it.blade.gateway;
+package it.blade.gateway.filter;
 
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -11,7 +11,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 /** Inoltra ai servizi solo ID e ruoli verificati dal gateway, non il JWT del client. */
-final class UserHeadersFilter implements GatewayFilter {
+public final class UserHeadersFilter implements GatewayFilter {
     private static final Logger log = LoggerFactory.getLogger(UserHeadersFilter.class);
 
     /**
