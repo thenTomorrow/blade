@@ -6,3 +6,7 @@ services:
         published: 8443
         protocol: tcp
         mode: ingress
+  blade-auth:
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:mysql://host.docker.internal:3306/blade"
+      SPRING_DATASOURCE_USERNAME: "blade"
