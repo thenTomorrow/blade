@@ -19,7 +19,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,7 +30,7 @@ import org.mockito.ArgumentCaptor;
 
 /** Verifica emissione dei JWT, rinnovo dell'access token e rifiuto delle credenziali errate. */
 class AuthServiceTest {
-    private static final String USER_ID = UUID.randomUUID().toString();
+    private static final Long USER_ID = 7L;
     private static String hash;
     private static JwtEncoder encoder;
     private static JwtDecoder decoder;
@@ -72,8 +71,8 @@ class AuthServiceTest {
         assertThat(refresh.getAudience()).containsExactly("blade-auth:refresh");
         var saved = ArgumentCaptor.forClass(AuthAccounts.UserAccess.class);
         verify(accounts).createAccess(saved.capture());
-        assertThat(saved.getValue().id()).isEqualTo(refresh.getId());
-        assertThat(saved.getValue().userId()).isEqualTo(access.getSubject());
+        assertThat(saved.getValue().sessionId()).isEqualTo(refresh.getId());
+        assertThat(saved.getValue().userId()).isEqualTo(Long.valueOf(access.getSubject()));
         assertThat(saved.getValue().expiresAt()).isEqualTo(refresh.getExpiresAt());
         when(accounts.useAccess(eq(refresh.getId()), eq(USER_ID), any(), eq(refresh.getExpiresAt()))).thenReturn(true);
         when(accounts.roles(USER_ID)).thenReturn(List.of("READER"));

@@ -18,23 +18,25 @@ Il gateway verifica firma RS256, issuer, audience, scadenza, tipo del token e cl
 
 ## Database MySQL per il login
 
+Se il database esiste e `user_access.id` contiene ancora UUID (`CHAR(36)`), fai un backup, ferma `blade-auth` ed esegui [`migrate-user-access-id.sql`](blade-auth/src/main/resources/db/migrate-user-access-id.sql) una sola volta con un account amministrativo prima di avviare la nuova versione. La migrazione conserva sessioni e revoche. Non rieseguire `schema.sql` su un database da conservare: elimina e ricrea le tabelle.
+
 1. In MySQL Workbench, esegui [`schema.sql`](blade-auth/src/main/resources/db/schema.sql) con un account amministrativo (MySQL 8.0.17+). Lo script crea lo schema `blade`, quattro tabelle e i ruoli `USER` e `READER`, ma nessun utente applicativo.
 2. Crea un account MySQL dedicato `blade_auth`. Dagli `SELECT` sulle quattro tabelle e `INSERT` e `UPDATE (last_used_at)` su `user_access`. Usa un account amministrativo separato per provisioning, revoche e pulizia.
-3. Da Git Bash, nella root, genera un hash Argon2id (64 MiB, 3 iterazioni, parallelismo 1):
+3. Dalla root genera l'hash Argon2id (64 MiB, 3 iterazioni, parallelismo 1). Al prompt digita la password e premi Invio.
 
-   ```sh
-   read -rs -p 'Password (minimo 15 caratteri): ' password; printf '\n'
-   printf '%s\n' "$password" | sh ./gradlew --quiet :blade-auth:passwordHash
-   unset password
+   ```powershell
+   .\gradlew.bat --no-daemon :blade-auth:passwordHash
    ```
+
+   In alternativa, senza prompt: `-PplainPassword='password-di-almeno-15-caratteri'`. La password resta nella history del terminale: usala solo in locale.
 
 4. Esegui le seguenti istruzioni in Workbench, sostituendo il segnaposto con l'intera stringa `$argon2id$...` stampata dal comando. Non committare l'hash.
 
    ```sql
    USE blade;
    START TRANSACTION;
-   SET @id = UUID();
-   INSERT INTO `user` (id, username, password_hash) VALUES (@id, 'blade', '<ARGON2ID_HASH>');
+   INSERT INTO `user` (username, password_hash) VALUES ('blade', '<ARGON2ID_HASH>');
+   SET @id = LAST_INSERT_ID();
    INSERT INTO user_role (user_id, role_id) SELECT @id, id FROM `role` WHERE code = 'USER';
    COMMIT;
    ```
@@ -66,8 +68,7 @@ Prerequisiti: Docker Engine (oppure Docker Desktop con container Linux), OpenSSL
    ```
 
    Se Git Bash converte erroneamente `/CN=localhost` in un percorso Windows, anteponi `MSYS_NO_PATHCONV=1` al comando `openssl req`.
-
-3. Registra i secret sul manager e avvia lo stack locale:
+3. Registra i secret sul manager e avvia lo stack locale:
 
    ```sh
    docker secret create blade_tls_cert .secrets/tls.pem
@@ -96,7 +97,7 @@ Usa `https://localhost:8443`. Aggiungi il certificato locale di test tra quelli 
 
 Invia le POST con `Content-Type: application/json` e senza header `Authorization`. Credenziali errate, JWT scaduti e uso del tipo di token sbagliato restituiscono `401`. Per vedere che gli header del client non vengono accettati, aggiungi `X-User-Roles: ADMIN` a una GET autenticata: il servizio deve restituire i ruoli del token, non `ADMIN`.
 
-Il login legge utente e ruoli da MySQL. Il refresh rimane riutilizzabile fino alla scadenza: `user_access` conserva il suo identificativo (`jti`), non il token. Per revocare una sessione, valorizza `revoked_at` con `UTC_TIMESTAMP(6)`; disabilitare l'utente blocca login e refresh. Gli access token gia emessi restano validi per un massimo di 5 minuti. Prevedi la pulizia delle sessioni scadute e un limite ai tentativi di login prima di esporre il servizio in produzione.
+Il login legge utente e ruoli da MySQL. Il refresh rimane riutilizzabile fino alla scadenza: `user_access.session_id` conserva il suo identificativo (`jti`), non il token. `user_access.id` va invece usato come chiave primaria numerica autoincrementale. Per revocare una sessione, valorizza `revoked_at` con `UTC_TIMESTAMP(6)`; disabilitare l'utente blocca login e refresh. Gli access token gia emessi restano validi per un massimo di 5 minuti. Prevedi la pulizia delle sessioni scadute e un limite ai tentativi di login prima di esporre il servizio in produzione.
 
 ## Deploy multi-host
 

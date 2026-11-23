@@ -24,54 +24,64 @@ class AuthAccountsTest {
         var issued = Instant.parse("2026-01-01T10:00:00Z");
         var expires = issued.plusSeconds(60);
         var later = issued.plusSeconds(15);
-        var userId = UUID.randomUUID().toString();
         var sessionId = UUID.randomUUID().toString();
+        var secondSessionId = UUID.randomUUID().toString();
 
         try (var factory = configuration.buildSessionFactory()) {
+            var userId = new Long[1];
+            var accessId = new Long[1];
             factory.inTransaction(em -> {
-                var user = new AuthUser(userId, "blade", "hash-fixture", true,
+                var user = new AuthUser("blade", "hash-fixture", true,
                         LocalDateTime.ofInstant(issued, ZoneOffset.UTC));
                 em.persist(user);
+                em.flush();
+                userId[0] = user.id();
                 for (String code : new String[] {"USER", "READER"}) {
                     var role = new AuthRole(code);
                     em.persist(role);
+                    em.flush();
                     em.persist(new AuthUserRole(user, role));
                 }
                 var accounts = new AuthAccounts();
                 accounts.setEntityManager(em);
                 assertThat(accounts.findByUsername("blade")).contains(
-                        new AuthAccounts.User(userId, "blade", "hash-fixture", true, issued));
+                        new AuthAccounts.User(userId[0], "blade", "hash-fixture", true, issued));
                 assertThat(accounts.findByUsername("Blade")).isEmpty();
-                assertThat(accounts.roles(userId)).containsExactly("READER", "USER");
-                accounts.createAccess(new AuthAccounts.UserAccess(sessionId, userId, issued, expires, null, null));
+                assertThat(accounts.roles(userId[0])).containsExactly("READER", "USER");
+                accounts.createAccess(new AuthAccounts.UserAccess(sessionId, userId[0], issued, expires, null, null));
+                accounts.createAccess(new AuthAccounts.UserAccess(secondSessionId, userId[0], issued, expires, null, null));
+                var ids = em.createQuery("select a.id from AuthUserAccess a where a.sessionId = :sessionId", Long.class);
+                accessId[0] = ids.setParameter("sessionId", sessionId).getSingleResult();
+                assertThat(accessId[0]).isPositive();
+                assertThat(ids.setParameter("sessionId", secondSessionId).getSingleResult()).isGreaterThan(accessId[0]);
             });
 
             factory.inTransaction(em -> {
                 var accounts = new AuthAccounts();
                 accounts.setEntityManager(em);
-                assertThat(accounts.useAccess(sessionId, userId, expires, expires)).isFalse();
-                assertThat(accounts.useAccess(sessionId, userId, later, expires.plusSeconds(1))).isFalse();
-                assertThat(accounts.useAccess(sessionId, UUID.randomUUID().toString(), later, expires)).isFalse();
-                assertThat(accounts.useAccess(sessionId, userId, later, expires)).isTrue();
-                assertThat(em.find(AuthUserAccess.class, sessionId).lastUsedAt())
+                assertThat(accounts.useAccess(sessionId, userId[0], expires, expires)).isFalse();
+                assertThat(accounts.useAccess(sessionId, userId[0], later, expires.plusSeconds(1))).isFalse();
+                assertThat(accounts.useAccess(sessionId, 999L, later, expires)).isFalse();
+                assertThat(accounts.useAccess(sessionId, userId[0], later, expires)).isTrue();
+                assertThat(em.find(AuthUserAccess.class, accessId[0]).lastUsedAt())
                         .isEqualTo(LocalDateTime.ofInstant(later, ZoneOffset.UTC));
                 assertThat(em.createMutationQuery("update AuthUser u set u.enabled = false where u.id = :id")
-                        .setParameter("id", userId).executeUpdate()).isEqualTo(1);
+                        .setParameter("id", userId[0]).executeUpdate()).isEqualTo(1);
             });
 
             factory.inTransaction(em -> {
                 var accounts = new AuthAccounts();
                 accounts.setEntityManager(em);
-                assertThat(accounts.useAccess(sessionId, userId, later.plusSeconds(1), expires)).isFalse();
+                assertThat(accounts.useAccess(sessionId, userId[0], later.plusSeconds(1), expires)).isFalse();
                 assertThat(em.createMutationQuery("update AuthUser u set u.enabled = true where u.id = :id")
-                        .setParameter("id", userId).executeUpdate()).isEqualTo(1);
-                em.find(AuthUserAccess.class, sessionId).revoke(LocalDateTime.ofInstant(later, ZoneOffset.UTC));
+                        .setParameter("id", userId[0]).executeUpdate()).isEqualTo(1);
+                em.find(AuthUserAccess.class, accessId[0]).revoke(LocalDateTime.ofInstant(later, ZoneOffset.UTC));
             });
 
             factory.inTransaction(em -> {
                 var accounts = new AuthAccounts();
                 accounts.setEntityManager(em);
-                assertThat(accounts.useAccess(sessionId, userId, later.plusSeconds(2), expires)).isFalse();
+                assertThat(accounts.useAccess(sessionId, userId[0], later.plusSeconds(2), expires)).isFalse();
             });
         }
     }

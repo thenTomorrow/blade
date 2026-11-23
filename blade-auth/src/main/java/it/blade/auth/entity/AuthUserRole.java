@@ -9,15 +9,12 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.MapsId;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "user_role")
 public class AuthUserRole {
     @Embeddable
-    record Key(@Column(name = "user_id", length = 36) @JdbcTypeCode(SqlTypes.CHAR) String userId,
-               @Column(name = "role_id") Long roleId) {}
+    public record Key(@Column(name = "user_id") Long userId, @Column(name = "role_id") Long roleId) {}
 
     @EmbeddedId
     Key id;
@@ -35,7 +32,7 @@ public class AuthUserRole {
     protected AuthUserRole() {}
 
     public AuthUserRole(AuthUser user, AuthRole role) {
-        this.id = new Key(user.id, role.id);
+        this.id = new Key(user.id(), role.id);
         this.user = user;
         this.role = role;
     }

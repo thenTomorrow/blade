@@ -16,40 +16,46 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-/** Fornisce al bilanciatore gli IP dei singoli task Swarm, non il VIP del servizio. */
+/**
+ * Fornisce al bilanciatore gli IP dei singoli task Swarm, non il VIP del
+ * servizio.
+ */
 class SwarmDiscovery {
-    private static final Logger log = LoggerFactory.getLogger(SwarmDiscovery.class);
+	private static final Logger log = LoggerFactory.getLogger(SwarmDiscovery.class);
 
-    /** Configura la risoluzione DNS per il servizio associato a questo client di bilanciamento. */
-    @Bean
-    ServiceInstanceListSupplier serviceInstances(Environment environment) {
-        String serviceId = environment.getRequiredProperty(LoadBalancerClientFactory.PROPERTY_NAME);
-        String host = environment.getRequiredProperty("blade.discovery.dns-prefix") + serviceId;
-        int port = environment.getRequiredProperty("blade.discovery.port", Integer.class);
-        return new ServiceInstanceListSupplier() {
-            /** Identifica il servizio logico a cui appartengono le istanze risolte. */
-            @Override
-            public String getServiceId() {
-                return serviceId;
-            }
+	/**
+	 * Configura la risoluzione DNS per il servizio associato a questo client di
+	 * bilanciamento.
+	 */
+	@Bean
+	ServiceInstanceListSupplier serviceInstances(Environment environment) {
+		String serviceId = environment.getRequiredProperty(LoadBalancerClientFactory.PROPERTY_NAME);
+		String host = environment.getRequiredProperty("blade.discovery.dns-prefix") + serviceId;
+		int port = environment.getRequiredProperty("blade.discovery.port", Integer.class);
+		return new ServiceInstanceListSupplier() {
+			/** Identifica il servizio logico a cui appartengono le istanze risolte. */
+			@Override
+			public String getServiceId() {
+				return serviceId;
+			}
 
-            /**
-             * Risolve gli IP dei task fuori dall'event loop; se il nome non esiste,
-             * registra un avviso e restituisce una lista vuota al bilanciatore.
-             */
-            @Override
-            public Flux<List<ServiceInstance>> get() {
-                return Mono.<List<ServiceInstance>>fromCallable(() -> Arrays.stream(InetAddress.getAllByName(host))
-                        .map(InetAddress::getHostAddress)
-                        .sorted()
-                        .<ServiceInstance>map(ip -> new DefaultServiceInstance(serviceId + "-" + ip,
-                                serviceId, ip, port, false)).toList())
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .onErrorResume(UnknownHostException.class, error -> {
-                            log.warn("No DNS records for Swarm service {}", host);
-                            return Mono.just(List.of());
-                        }).flux();
-            }
-        };
-    }
+			/**
+			 * Risolve gli IP dei task fuori dall'event loop; se il nome non esiste,
+			 * registra un avviso e restituisce una lista vuota al bilanciatore.
+			 */
+			@Override
+			public Flux<List<ServiceInstance>> get() {
+				return Mono
+						.<List<ServiceInstance>>fromCallable(() -> Arrays.stream(InetAddress.getAllByName(host))
+								.map(InetAddress::getHostAddress).sorted()
+								.<ServiceInstance>map(ip -> new DefaultServiceInstance(serviceId + "-" + ip, serviceId,
+										ip, port, false))
+								.toList())
+						.subscribeOn(Schedulers.boundedElastic()).onErrorResume(UnknownHostException.class, error -> {
+							log.warn("No DNS records for Swarm service {}", host);
+							return Mono.just(List.of());
+						}).flux();
+			}
+		};
+	}
 }

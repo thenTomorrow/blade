@@ -27,7 +27,8 @@ public class AuthService {
     private static final Duration ACCESS_TTL = Duration.ofMinutes(5);
     private static final Duration REFRESH_TTL = Duration.ofDays(1);
     private static final Pattern ROLE = Pattern.compile("[A-Z][A-Z0-9_]{0,31}");
-    private static final Pattern UUID_TEXT = Pattern.compile("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}");
+    private static final Pattern USER_ID = Pattern.compile("[1-9]\\d{0,18}");
+    private static final Pattern SESSION_ID = Pattern.compile("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}");
     private final PasswordEncoder passwords = Passwords.encoder();
     private final String dummyHash = passwords.encode(UUID.randomUUID().toString());
     private final AuthAccounts accounts;
@@ -56,8 +57,9 @@ public class AuthService {
         var roles = roles(user.id());
         Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
         String sessionId = UUID.randomUUID().toString();
-        String refresh = issue(now, REFRESH_TTL, "blade-auth:refresh", "refresh", user.id(), sessionId, List.of());
-        var response = response(now, refresh, REFRESH_TTL.toSeconds(), user.id(), roles);
+        String subject = user.id().toString();
+        String refresh = issue(now, REFRESH_TTL, "blade-auth:refresh", "refresh", subject, sessionId, List.of());
+        var response = response(now, refresh, REFRESH_TTL.toSeconds(), subject, roles);
         accounts.createAccess(new AuthAccounts.UserAccess(sessionId, user.id(), now, now.plus(REFRESH_TTL), null, null));
         return response;
     }
@@ -74,25 +76,33 @@ public class AuthService {
         try {
             var jwt = refreshDecoder.decode(value);
             Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+            Long userId = userId(jwt.getSubject());
             if (!List.of("blade-auth:refresh").equals(jwt.getAudience())
                     || !"refresh".equals(jwt.getClaimAsString("token_use"))
-                    || !validId(jwt.getSubject()) || !validId(jwt.getId()) || jwt.getExpiresAt() == null
+                    || userId == null || !validSession(jwt.getId()) || jwt.getExpiresAt() == null
                     || !now.isBefore(jwt.getExpiresAt())
-                    || !accounts.useAccess(jwt.getId(), jwt.getSubject(), now, jwt.getExpiresAt())) {
+                    || !accounts.useAccess(jwt.getId(), userId, now, jwt.getExpiresAt())) {
                 throw unauthorized();
             }
             return response(now.truncatedTo(ChronoUnit.SECONDS), value,
-                    Duration.between(now, jwt.getExpiresAt()).toSeconds(), jwt.getSubject(), roles(jwt.getSubject()));
+                    Duration.between(now, jwt.getExpiresAt()).toSeconds(), userId.toString(), roles(userId));
         } catch (JwtException exception) {
             throw unauthorized();
         }
     }
 
-    private static boolean validId(String value) {
-        return value != null && UUID_TEXT.matcher(value).matches();
+    private static Long userId(String value) {
+        if (value == null || !USER_ID.matcher(value).matches()) {
+            return null;
+        }
+        return Long.valueOf(value);
     }
 
-    private List<String> roles(String userId) {
+    private static boolean validSession(String value) {
+        return value != null && SESSION_ID.matcher(value).matches();
+    }
+
+    private List<String> roles(Long userId) {
         var roles = accounts.roles(userId);
         if (roles.isEmpty() || roles.size() > 32 || !roles.stream().allMatch(role -> ROLE.matcher(role).matches())) {
             throw unauthorized();

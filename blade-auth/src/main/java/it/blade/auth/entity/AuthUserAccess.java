@@ -3,6 +3,8 @@ package it.blade.auth.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -16,9 +18,12 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "user_access")
 public class AuthUserAccess {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
     @JdbcTypeCode(SqlTypes.CHAR)
-    @Column(length = 36)
-    private String id;
+    @Column(name = "session_id", length = 36, nullable = false, unique = true)
+    private String sessionId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
@@ -38,8 +43,8 @@ public class AuthUserAccess {
 
     protected AuthUserAccess() {}
 
-    public AuthUserAccess(String id, AuthUser user, LocalDateTime issuedAt, LocalDateTime expiresAt) {
-        this.id = id;
+    public AuthUserAccess(String sessionId, AuthUser user, LocalDateTime issuedAt, LocalDateTime expiresAt) {
+        this.sessionId = sessionId;
         this.user = user;
         this.issuedAt = issuedAt;
         this.expiresAt = expiresAt;

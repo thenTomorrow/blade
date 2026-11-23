@@ -1,5 +1,4 @@
 package it.blade.gateway.config;
-
 import it.blade.gateway.filter.GatewayRequestLoggingFilter;
 import it.blade.gateway.filter.UserHeadersFilter;
 import java.io.IOException;
@@ -35,7 +34,7 @@ import org.springframework.security.web.server.context.NoOpServerSecurityContext
     @LoadBalancerClient(name = "blade-service-b", configuration = SwarmDiscovery.class)
 })
 class GatewayConfiguration {
-    private static final Pattern USER_ID = Pattern.compile("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}");
+    private static final Pattern USER_ID = Pattern.compile("[1-9]\\d{0,18}");
     private static final Pattern ROLE = Pattern.compile("[A-Z][A-Z0-9_]{0,31}");
 
     /** Registra metodo, endpoint, stato e durata di ogni richiesta gestita dal gateway. */

@@ -27,7 +27,7 @@ import java.nio.file.Path;
 
 /** Verifica via HTTP il routing e il confine di fiducia del gateway senza dipendere da Swarm. */
 class GatewayTest {
-    private static final String USER_ID = "51d4db3c-bb6f-423a-b313-7f6f023a2d15";
+    private static final String USER_ID = "1";
 
     /**
      * Verifica che entrambe le rotte protette rifiutino token mancanti, scaduti o di refresh

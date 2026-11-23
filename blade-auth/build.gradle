@@ -25,6 +25,9 @@ tasks.named('test') { useJUnitPlatform() }
 
 tasks.register('passwordHash', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'it.blade.auth.security.Passwords'
+    mainClass = 'it.blade.auth.security.PasswordHashPrinter'
     standardInput = System.in
+    if (project.hasProperty('plainPassword')) {
+        args project.property('plainPassword')
+    }
 }

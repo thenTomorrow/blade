@@ -15,8 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 /** Accesso JPA alle tabelle di autenticazione; gli orari delle sessioni sono in UTC. */
 @Repository
 public class AuthAccounts {
-    public record User(String id, String username, String passwordHash, boolean enabled, Instant createdAt) {}
-    public record UserAccess(String id, String userId, Instant issuedAt, Instant expiresAt,
+    public record User(Long id, String username, String passwordHash, boolean enabled, Instant createdAt) {}
+    public record UserAccess(String sessionId, Long userId, Instant issuedAt, Instant expiresAt,
                       Instant lastUsedAt, Instant revokedAt) {}
 
     private EntityManager entities;
@@ -33,7 +33,7 @@ public class AuthAccounts {
                 u.createdAt().toInstant(ZoneOffset.UTC)));
     }
 
-    public List<String> roles(String userId) {
+    public List<String> roles(Long userId) {
         return entities.createQuery("""
                 select r.code from AuthUserRole ur join ur.role r
                 where ur.user.id = :userId order by r.code
@@ -43,17 +43,18 @@ public class AuthAccounts {
     @Transactional
     public void createAccess(UserAccess access) {
         var user = entities.getReference(AuthUser.class, access.userId());
-        entities.persist(new AuthUserAccess(access.id(), user, localUtc(access.issuedAt()), localUtc(access.expiresAt())));
+        entities.persist(new AuthUserAccess(access.sessionId(), user,
+                localUtc(access.issuedAt()), localUtc(access.expiresAt())));
     }
 
     // Un UPDATE condizionale rispetta anche una revoca concorrente.
-    public boolean useAccess(String id, String userId, Instant now, Instant expiresAt) {
+    public boolean useAccess(String sessionId, Long userId, Instant now, Instant expiresAt) {
         return entities.createQuery("""
                 update AuthUserAccess a set a.lastUsedAt = :now
-                where a.id = :id and a.user.id = :userId and a.revokedAt is null
+                where a.sessionId = :sessionId and a.user.id = :userId and a.revokedAt is null
                     and a.expiresAt = :expires and a.expiresAt > :now
                     and exists (select u.id from AuthUser u where u.id = :userId and u.enabled = true)
-                """).setParameter("id", id).setParameter("userId", userId).setParameter("now", localUtc(now))
+                """).setParameter("sessionId", sessionId).setParameter("userId", userId).setParameter("now", localUtc(now))
                 .setParameter("expires", localUtc(expiresAt)).executeUpdate() == 1;
     }
 
