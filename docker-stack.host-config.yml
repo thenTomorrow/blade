@@ -1,0 +1,46 @@
+version: "3.8"
+
+x-host-config: &host-config
+  environment:
+    SPRING_CONFIG_ADDITIONAL_LOCATION: optional:file:/blade-config/application.properties
+  entrypoint:
+    - /bin/sh
+    - -ec
+    - |
+      if [ -z "$$LOGGING_CONFIG" ] && [ -f /blade-config/logback-spring.xml ]; then
+        export LOGGING_CONFIG=file:/blade-config/logback-spring.xml
+      fi
+      exec java "$$@"
+    - blade-entrypoint
+  command: ["-jar", "/app/app.jar"]
+
+x-config-mount: &config-mount
+  type: bind
+  target: /blade-config
+  read_only: true
+
+services:
+  blade-api-gateway:
+    <<: *host-config
+    command: ["-Djava.security.properties=/app/dns.security", "-jar", "/app/app.jar"]
+    volumes:
+      - <<: *config-mount
+        source: /opt/blade-api-gateway
+
+  blade-auth:
+    <<: *host-config
+    volumes:
+      - <<: *config-mount
+        source: /opt/blade-auth
+
+  blade-service-a:
+    <<: *host-config
+    volumes:
+      - <<: *config-mount
+        source: /opt/blade-service-a
+
+  blade-service-b:
+    <<: *host-config
+    volumes:
+      - <<: *config-mount
+        source: /opt/blade-service-b

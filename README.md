@@ -115,6 +115,30 @@ docker service scale blade-prod_blade-api-gateway=2 blade-prod_blade-service-a=2
 
 Lo scale Ã¨ facoltativo: di default c'Ã¨ una replica per servizio. In produzione, due repliche del gateway richiedono due nodi disponibili (al massimo una replica per nodo). Nginx parte con una sola replica, quindi non Ã¨ ad alta disponibilitÃ  di default.
 
+### Configurazione Spring opzionale dal nodo
+
+Per leggere i file dal nodo Linux che esegue il container, aggiungi
+`-c docker-stack.host-config.yml` come ultimo file del deploy:
+
+```sh
+docker stack deploy --with-registry-auth -c docker-stack.yml -c docker-stack.prod.yml -c docker-stack.host-config.yml blade-prod
+```
+
+Prima del deploy crea `/opt/blade-api-gateway`, `/opt/blade-auth`,
+`/opt/blade-service-a` e `/opt/blade-service-b` su ogni nodo che può ospitare
+i rispettivi servizi. Swarm richiede che esistano le directory dei bind mount,
+anche vuote. Se non vuoi predisporle, non includere l'override.
+
+- `application.properties`, se presente, sovrascrive le chiavi corrispondenti
+  del JAR; le altre mantengono il valore interno. Le variabili d'ambiente
+  continuano ad avere precedenza e `blade-auth` conserva l'import dei secret.
+- `logback-spring.xml`, se presente, sostituisce la configurazione Logback
+  interna. Se è già impostata `LOGGING_CONFIG`, viene rispettata.
+- I file sono montati in sola lettura e devono essere leggibili dall'UID
+  `10001` nel container. Tieni i segreti in Swarm, non in questi file.
+  Dopo una modifica, riavvia le repliche interessate con
+  `docker service update --force <stack>_<servizio>`.
+
 ### Log e retention
 
 Tutti i container usano il driver Docker `json-file`, con rotazione a 10 MB per file e fino a 30 file per container (circa 300 MB per replica). La rotazione Ã¨ basata sulla dimensione, non sul tempo: non garantisce di conservare esattamente 30 giorni. Inoltre, i log locali possono sparire quando Swarm rimuove un container o un nodo. Per una retention garantita e consultabile tra nodi serve inoltrare i log a un sistema centralizzato.
