@@ -115,6 +115,28 @@ docker service scale blade-prod_blade-api-gateway=2 blade-prod_blade-service-a=2
 
 Lo scale è facoltativo: di default c'è una replica per servizio. In produzione, due repliche del gateway richiedono due nodi disponibili (al massimo una replica per nodo). Nginx parte con una sola replica, quindi non è ad alta disponibilità di default.
 
+### Log e retention
+
+Tutti i container usano il driver Docker `json-file`, con rotazione a 10 MB per file e fino a 30 file per container (circa 300 MB per replica). La rotazione è basata sulla dimensione, non sul tempo: non garantisce di conservare esattamente 30 giorni. Inoltre, i log locali possono sparire quando Swarm rimuove un container o un nodo. Per una retention garantita e consultabile tra nodi serve inoltrare i log a un sistema centralizzato.
+
+Per seguire i log recenti di tutte le repliche:
+
+```sh
+docker service logs --since 1h --follow blade-prod_blade-service-a
+```
+
+Per estrarre un singolo giorno, individua i nodi che eseguono il servizio con `docker service ps`, poi su ciascun nodo elenca i container (aggiungi `-a` se vuoi includere container terminati non ancora rimossi):
+
+```sh
+docker ps -a --filter label=com.docker.swarm.service.name=blade-prod_blade-service-a --format '{{.ID}} {{.Names}}'
+```
+
+Sul nodo che ospita ciascun container, usa il suo ID e l'intervallo desiderato. Gli orari qui sotto sono UTC; modifica data e orario finale per il giorno da consultare:
+
+```sh
+docker logs --timestamps --since "2026-11-23T00:00:00Z" --until "2026-11-24T00:00:00Z" <container-id>
+```
+
 ### Build e test
 
 ```powershell

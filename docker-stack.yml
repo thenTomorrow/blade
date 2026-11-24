@@ -6,10 +6,17 @@ x-java-deploy: &java-deploy
     condition: on-failure
     delay: 5s
 
+x-container-logging: &container-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "30"
+
 services:
   nginx:
     image: ${BLADE_IMAGE_PREFIX:-blade}/nginx:${BLADE_IMAGE_TAG:-local}
     networks: [edge]
+    logging: *container-logging
     secrets:
       - source: tls_cert
         target: tls_cert
@@ -22,6 +29,7 @@ services:
   blade-api-gateway:
     image: ${BLADE_IMAGE_PREFIX:-blade}/blade-api-gateway:${BLADE_IMAGE_TAG:-local}
     networks: [edge, auth, service-a, service-b]
+    logging: *container-logging
     environment:
       BLADE_JWT_ISSUER: ${BLADE_JWT_ISSUER:-blade-auth}
       BLADE_JWT_PUBLIC_KEY_FILE: /run/secrets/jwt_public_key
@@ -36,6 +44,7 @@ services:
   blade-auth:
     image: ${BLADE_IMAGE_PREFIX:-blade}/blade-auth:${BLADE_IMAGE_TAG:-local}
     networks: [auth, auth-db]
+    logging: *container-logging
     environment:
       BLADE_JWT_ISSUER: ${BLADE_JWT_ISSUER:-blade-auth}
       BLADE_JWT_PUBLIC_KEY_FILE: /run/secrets/jwt_public_key
@@ -64,11 +73,13 @@ services:
   blade-service-a:
     image: ${BLADE_IMAGE_PREFIX:-blade}/blade-service-a:${BLADE_IMAGE_TAG:-local}
     networks: [service-a]
+    logging: *container-logging
     deploy: *java-deploy
 
   blade-service-b:
     image: ${BLADE_IMAGE_PREFIX:-blade}/blade-service-b:${BLADE_IMAGE_TAG:-local}
     networks: [service-b]
+    logging: *container-logging
     deploy: *java-deploy
 
 networks:
